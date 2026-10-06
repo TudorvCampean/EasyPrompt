@@ -1,6 +1,6 @@
 """Factory for creating agents configured with domain-specific personas."""
 
-from typing import Tuple
+from typing import Optional, Tuple
 from core.llm_clients import BaseLLMClient
 from domain.profiles import DomainProfile
 from agents.prompt_crafter import PromptCrafter
@@ -14,25 +14,28 @@ class AgentFactory:
     @staticmethod
     def create_pipeline_agents(
         domain_profile: DomainProfile,
-        gemini_client: BaseLLMClient,
-        groq_client: BaseLLMClient,
+        crafter_client: BaseLLMClient,
+        verifier_client: BaseLLMClient,
+        executor_client: Optional[BaseLLMClient] = None,
     ) -> Tuple[PromptCrafter, LogicVerifier, Executor]:
-        """Instantiate Crafter (Gemini), Verifier (Groq), and Executor (Gemini) with domain personas."""
+        """Instantiate Crafter, Verifier, and Executor with domain personas and injected LLM clients."""
+        final_executor_client = executor_client if executor_client is not None else crafter_client
+
         crafter = PromptCrafter(
             name=f"PromptCrafter [{domain_profile.display_name}]",
-            llm_client=gemini_client,
+            llm_client=crafter_client,
             system_instruction=domain_profile.crafter_system_prompt,
         )
 
         verifier = LogicVerifier(
             name=f"LogicVerifier [{domain_profile.display_name}]",
-            llm_client=groq_client,
+            llm_client=verifier_client,
             system_instruction=domain_profile.verifier_system_prompt,
         )
 
         executor = Executor(
             name=f"Executor [{domain_profile.display_name}]",
-            llm_client=gemini_client,
+            llm_client=final_executor_client,
             system_instruction=domain_profile.executor_system_prompt,
         )
 

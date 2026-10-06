@@ -74,8 +74,9 @@ def main() -> None:
     # Factory generates domain-specific agents
     crafter, verifier, executor = AgentFactory.create_pipeline_agents(
         domain_profile=profile,
-        gemini_client=gemini_client,
-        groq_client=groq_client,
+        crafter_client=gemini_client,
+        verifier_client=groq_client,
+        executor_client=gemini_client,
     )
 
     # Build and execute pipeline

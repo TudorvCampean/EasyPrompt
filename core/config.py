@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import os
 from pathlib import Path
+from typing import List, Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -12,22 +13,37 @@ load_dotenv(BASE_DIR / ".env")
 
 @dataclass(frozen=True)
 class Settings:
-    """Application settings and API configuration."""
+    """Application settings and API configurations."""
 
+    # API Keys
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
+    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
 
-    # Default models
+    # Default Models
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    openrouter_model: str = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
 
-    def validate_keys(self) -> None:
+    def validate_keys(self, required_services: Optional[List[str]] = None) -> None:
         """Validate that required API keys are configured."""
+        if required_services is None:
+            # By default check at least one primary LLM provider
+            if not any([self.gemini_api_key, self.groq_api_key, self.openrouter_api_key]):
+                raise ValueError(
+                    "No API keys configured! Please set at least GEMINI_API_KEY, GROQ_API_KEY, "
+                    "or OPENROUTER_API_KEY in your .env file."
+                )
+            return
+
         missing = []
-        if not self.gemini_api_key:
-            missing.append("GEMINI_API_KEY")
-        if not self.groq_api_key:
-            missing.append("GROQ_API_KEY")
+        for service in required_services:
+            key_name = f"{service.upper()}_API_KEY"
+            if not getattr(self, f"{service.lower()}_api_key", None):
+                missing.append(key_name)
+
         if missing:
             raise ValueError(
                 f"Missing required environment variables: {', '.join(missing)}. "
