@@ -99,11 +99,59 @@ with st.sidebar:
     )
 
     st.divider()
-    with st.expander("🔑 Optional API Key Overrides"):
-        override_gemini = st.text_input("Gemini API Key", type="password")
-        override_groq = st.text_input("Groq API Key", type="password")
-        override_deepseek = st.text_input("DeepSeek API Key", type="password")
-        override_openrouter = st.text_input("OpenRouter API Key", type="password")
+    st.subheader("🔑 API Keys & Direct Links")
+
+    # Gemini
+    override_gemini = st.text_input(
+        "Google Gemini API Key",
+        value=settings.gemini_api_key,
+        type="password",
+        placeholder="AIzaSy...",
+    )
+    st.link_button(
+        "🔗 Obține Cheie Gratuită Gemini (AI Studio)",
+        "https://aistudio.google.com/app/apikey",
+        use_container_width=True,
+    )
+
+    # Groq
+    override_groq = st.text_input(
+        "Groq API Key",
+        value=settings.groq_api_key,
+        type="password",
+        placeholder="gsk_...",
+    )
+    st.link_button(
+        "🔗 Obține Cheie Gratuită Groq (Console)",
+        "https://console.groq.com/keys",
+        use_container_width=True,
+    )
+
+    # DeepSeek
+    override_deepseek = st.text_input(
+        "DeepSeek API Key",
+        value=settings.deepseek_api_key,
+        type="password",
+        placeholder="sk-...",
+    )
+    st.link_button(
+        "🔗 Obține Cheie DeepSeek (Platform)",
+        "https://platform.deepseek.com/api_keys",
+        use_container_width=True,
+    )
+
+    # OpenRouter
+    override_openrouter = st.text_input(
+        "OpenRouter API Key",
+        value=settings.openrouter_api_key,
+        type="password",
+        placeholder="sk-or-v1-...",
+    )
+    st.link_button(
+        "🔗 Obține Cheie OpenRouter (Free tier)",
+        "https://openrouter.ai/settings/keys",
+        use_container_width=True,
+    )
 
 
 # ----------------- MAIN INTERFACE -----------------
