@@ -1,7 +1,7 @@
 """Pipeline orchestrator chaining PromptCrafter -> LogicVerifier -> Executor."""
 
 import time
-from typing import Optional
+from typing import Generator, Optional, Tuple
 from pydantic import BaseModel
 from rich.console import Console
 from rich.panel import Panel
@@ -40,6 +40,45 @@ class AgentPipeline:
         self.executor = executor
         self.console = console or Console()
 
+    def run_stages(
+        self, user_goal: str
+    ) -> Generator[Tuple[str, AgentResponse], None, PipelineResult]:
+        """Generator that yields results step-by-step as each stage completes."""
+        total_start = time.perf_counter()
+
+        # Stage 1: PromptCrafter
+        crafter_res = self.crafter.run(input_text=user_goal)
+        yield ("crafter", crafter_res)
+
+        # Stage 2: LogicVerifier
+        verifier_context = {"user_goal": user_goal}
+        verifier_res = self.verifier.run(
+            input_text=crafter_res.content,
+            context=verifier_context,
+        )
+        yield ("verifier", verifier_res)
+
+        # Stage 3: Executor
+        executor_context = {
+            "user_goal": user_goal,
+            "crafted_plan": crafter_res.content,
+        }
+        executor_res = self.executor.run(
+            input_text=verifier_res.content,
+            context=executor_context,
+        )
+        yield ("executor", executor_res)
+
+        total_elapsed = time.perf_counter() - total_start
+        return PipelineResult(
+            domain_key=self.domain_key,
+            user_goal=user_goal,
+            crafter_response=crafter_res,
+            verifier_response=verifier_res,
+            executor_response=executor_res,
+            total_duration_seconds=total_elapsed,
+        )
+
     def run(self, user_goal: str) -> PipelineResult:
         """Execute the multi-agent sequential pipeline with progress logging."""
         total_start = time.perf_counter()
@@ -53,45 +92,34 @@ class AgentPipeline:
             )
         )
 
-        # Stage 1: PromptCrafter (Gemini)
-        self.console.print("[bold blue]➔ Stage 1: PromptCrafter running...[/bold blue]")
-        crafter_res = self.crafter.run(input_text=user_goal)
-        self.console.print(
-            f"✔ [blue]PromptCrafter completed in {crafter_res.execution_time_seconds:.2f}s[/blue]"
-        )
+        stage_generator = self.run_stages(user_goal)
+        crafter_res: Optional[AgentResponse] = None
+        verifier_res: Optional[AgentResponse] = None
+        executor_res: Optional[AgentResponse] = None
 
-        # Stage 2: LogicVerifier (Groq)
-        self.console.print("[bold magenta]➔ Stage 2: LogicVerifier running...[/bold magenta]")
-        verifier_context = {"user_goal": user_goal}
-        verifier_res = self.verifier.run(
-            input_text=crafter_res.content,
-            context=verifier_context,
-        )
-        self.console.print(
-            f"✔ [magenta]LogicVerifier completed in {verifier_res.execution_time_seconds:.2f}s[/magenta]"
-        )
-
-        # Stage 3: Executor (Gemini)
-        self.console.print("[bold green]➔ Stage 3: Executor running...[/bold green]")
-        executor_context = {
-            "user_goal": user_goal,
-            "crafted_plan": crafter_res.content,
-        }
-        executor_res = self.executor.run(
-            input_text=verifier_res.content,
-            context=executor_context,
-        )
-        self.console.print(
-            f"✔ [green]Executor completed in {executor_res.execution_time_seconds:.2f}s[/green]"
-        )
+        for stage_name, res in stage_generator:
+            if stage_name == "crafter":
+                crafter_res = res
+                self.console.print(
+                    f"✔ [blue]PromptCrafter completed in {res.execution_time_seconds:.2f}s[/blue]"
+                )
+            elif stage_name == "verifier":
+                verifier_res = res
+                self.console.print(
+                    f"✔ [magenta]LogicVerifier completed in {res.execution_time_seconds:.2f}s[/magenta]"
+                )
+            elif stage_name == "executor":
+                executor_res = res
+                self.console.print(
+                    f"✔ [green]Executor completed in {res.execution_time_seconds:.2f}s[/green]"
+                )
 
         total_elapsed = time.perf_counter() - total_start
-
         return PipelineResult(
             domain_key=self.domain_key,
             user_goal=user_goal,
-            crafter_response=crafter_res,
-            verifier_response=verifier_res,
-            executor_response=executor_res,
+            crafter_response=crafter_res,  # type: ignore
+            verifier_response=verifier_res,  # type: ignore
+            executor_response=executor_res,  # type: ignore
             total_duration_seconds=total_elapsed,
         )
