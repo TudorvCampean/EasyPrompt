@@ -16,7 +16,6 @@ class RoutingProfile(BaseModel):
 
     id: str
     name: str
-    icon: str = "🎯"
     description: str
     crafter_chain: List[str] = Field(
         description="Ordered model chain for PromptCrafter (first = primary)"
@@ -35,7 +34,6 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
     "coding_pro": RoutingProfile(
         id="coding_pro",
         name="Best for Coding",
-        icon="💻",
         description=(
             "Quality-first routing for software engineering. "
             "Prioritizes Gemini 3.8 Flash and Groq GPT-OSS-120B with "
@@ -63,10 +61,9 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
     "fast_throughput": RoutingProfile(
         id="fast_throughput",
         name="Ultra Fast / Low Latency",
-        icon="⚡",
         description=(
             "Speed-first routing using Groq's high-speed inference. "
-            "Falls back to Gemini 3.8 Flash for unmatched reliability."
+            "Falls back to Gemini 3.8 Flash for reliability."
         ),
         crafter_chain=[
             "groq/openai/gpt-oss-120b",
@@ -88,10 +85,9 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
     "free_tier": RoutingProfile(
         id="free_tier",
         name="Free Tier Optimized",
-        icon="🆓",
         description=(
             "Uses generous free-tier quotas from Groq and Google AI Studio. "
-            "OpenRouter ':free' models as extra safeguard."
+            "OpenRouter free models as safeguard."
         ),
         crafter_chain=[
             "groq/openai/gpt-oss-120b",
@@ -113,7 +109,6 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
     "balanced": RoutingProfile(
         id="balanced",
         name="Balanced Reasoning",
-        icon="⚖️",
         description=(
             "Balanced quality, latency, and resilience. "
             "Gemini 3.8 Flash as anchor with Groq and DeepSeek as fallbacks."
@@ -137,7 +132,6 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
     "deep_reasoning": RoutingProfile(
         id="deep_reasoning",
         name="Deep Reasoning & Analysis",
-        icon="🧠",
         description=(
             "Optimized for complex reasoning tasks (mathematics, logic proofs). "
             "Prioritizes high-parameter models and reasoning engines."

@@ -35,7 +35,7 @@ def display_combos(console: Console) -> None:
     table.add_column("Description", style="white")
 
     for combo in ROUTING_PROFILES.values():
-        table.add_row(combo.id, f"{combo.icon} {combo.name}", combo.description)
+        table.add_row(combo.id, combo.name, combo.description)
 
     console.print(table)
 
