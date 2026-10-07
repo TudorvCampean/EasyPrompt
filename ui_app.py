@@ -1,70 +1,15 @@
-"""Streamlit Web UI for EasyPrompt Multi-Agent Pipeline."""
+"""Streamlit Web UI for EasyPrompt Multi-Agent Pipeline with OmniRoute Auto-Fallback."""
 
 import time
-from typing import List
+from typing import Dict, List
 import streamlit as st
 
 from core.config import settings
-from core.llm_clients import (
-    BaseLLMClient,
-    GeminiClient,
-    GroqClient,
-    DeepSeekClient,
-    OpenRouterClient,
-)
+from core.router import RouterClient
+from core.combos import ROUTING_PROFILES, get_routing_profile, list_routing_profiles
 from domain.profiles import DOMAIN_PROFILES, get_domain_profile
 from agents.factory import AgentFactory
 from orchestrator.pipeline import AgentPipeline
-
-
-PROVIDERS = ["Gemini", "Groq", "DeepSeek", "OpenRouter"]
-
-
-def init_llm_client(provider: str, model_name: str = "", key_override: str = "") -> BaseLLMClient:
-    """Instantiate the corresponding LLM client with fallback to settings."""
-    if provider == "Gemini":
-        api_key = key_override or settings.gemini_api_key
-        return GeminiClient(api_key=api_key, model_name=model_name or "gemini-3.8-flash")
-    elif provider == "Groq":
-        api_key = key_override or settings.groq_api_key
-        return GroqClient(api_key=api_key, model_name=model_name or "llama-3.3-70b-versatile")
-    elif provider == "DeepSeek":
-        api_key = key_override or settings.deepseek_api_key
-        return DeepSeekClient(api_key=api_key, model_name=model_name or "deepseek-chat")
-    elif provider == "OpenRouter":
-        api_key = key_override or settings.openrouter_api_key
-        return OpenRouterClient(api_key=api_key, model_name=model_name or "anthropic/claude-3.5-sonnet")
-    raise ValueError(f"Unsupported provider: {provider}")
-
-
-def get_key_for_provider(
-    provider: str,
-    gemini_k: str,
-    groq_k: str,
-    deepseek_k: str,
-    openrouter_k: str,
-) -> str:
-    """Helper to return the relevant API key for a given provider."""
-    if provider == "Gemini":
-        return gemini_k
-    elif provider == "Groq":
-        return groq_k
-    elif provider == "DeepSeek":
-        return deepseek_k
-    elif provider == "OpenRouter":
-        return openrouter_k
-    return ""
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def get_models_for_provider(provider: str, api_key: str) -> List[str]:
-    """Dynamically query and return available models for a provider, cached for 60s."""
-    try:
-        client = init_llm_client(provider=provider, model_name="", key_override=api_key)
-        models = client.get_available_models()
-        return models if models else ["default"]
-    except Exception:
-        return ["default"]
 
 
 # Page configuration
@@ -76,9 +21,8 @@ st.set_page_config(
 
 st.title("⚡ EasyPrompt: Domain-Adaptive Pipeline")
 st.caption(
-    "Architecture: **PromptCrafter** (Analysis & Plan) ➔ "
-    "**LogicVerifier** (Audit & Logic Critique) ➔ "
-    "**Executor** (Final Synthesis)"
+    "OmniRoute Gateway: **Auto-Fallback** ➔ **Provider Agnosticism** ➔ **Unified Protocol** | "
+    "Stages: **PromptCrafter** ➔ **LogicVerifier** ➔ **Executor**"
 )
 
 # ----------------- SIDEBAR CONFIGURATION -----------------
@@ -86,7 +30,7 @@ with st.sidebar:
     st.header("⚙️ Configuration")
 
     # 1. Domain selection
-    st.subheader("1. Select Domain")
+    st.subheader("1. 🎯 Select Domain")
     domain_options = list(DOMAIN_PROFILES.keys())
     domain_format = {k: f"{v.display_name} ({k})" for k, v in DOMAIN_PROFILES.items()}
     selected_domain_key = st.selectbox(
@@ -100,8 +44,40 @@ with st.sidebar:
 
     st.divider()
 
-    # 2. API Keys & Portal Links
-    st.subheader("2. 🔑 API Keys & Direct Links")
+    # 2. Routing Combo (OmniRoute Auto-Fallback)
+    st.subheader("2. 🔀 Routing Combo (Auto-Fallback)")
+    combos = list_routing_profiles()
+    combo_ids = [c.id for c in combos]
+    combo_labels = {c.id: f"{c.icon} {c.name}" for c in combos}
+
+    # Intelligent default based on selected domain
+    default_combo_idx = 0
+    if selected_domain_key == "coding":
+        default_combo_idx = combo_ids.index("coding_pro") if "coding_pro" in combo_ids else 0
+    elif selected_domain_key == "math":
+        default_combo_idx = combo_ids.index("deep_reasoning") if "deep_reasoning" in combo_ids else 0
+    else:
+        default_combo_idx = combo_ids.index("balanced") if "balanced" in combo_ids else 0
+
+    selected_combo_id = st.selectbox(
+        "Routing Preset",
+        options=combo_ids,
+        format_func=lambda x: combo_labels[x],
+        index=default_combo_idx,
+        help="OmniRoute automatically tries the primary model and falls back to alternatives upon 429/404/5xx errors.",
+    )
+    routing_profile = get_routing_profile(selected_combo_id)
+    st.markdown(f"*{routing_profile.description}*")
+
+    with st.expander("🔍 View Fallback Chains", expanded=False):
+        st.markdown(f"**Crafter Chain:** `{' ➔ '.join(routing_profile.crafter_chain)}`")
+        st.markdown(f"**Verifier Chain:** `{' ➔ '.join(routing_profile.verifier_chain)}`")
+        st.markdown(f"**Executor Chain:** `{' ➔ '.join(routing_profile.executor_chain)}`")
+
+    st.divider()
+
+    # 3. API Keys & Portal Links
+    st.subheader("3. 🔑 API Keys & Provider Status")
 
     # Gemini
     override_gemini = st.text_input(
@@ -155,59 +131,25 @@ with st.sidebar:
         use_container_width=True,
     )
 
-    st.divider()
+    # Active status indicator
+    active_keys = []
+    if override_gemini:
+        active_keys.append("Gemini")
+    if override_groq:
+        active_keys.append("Groq")
+    if override_deepseek:
+        active_keys.append("DeepSeek")
+    if override_openrouter:
+        active_keys.append("OpenRouter")
 
-    # 3. Dynamic Model Selectors per Stage
-    st.subheader("3. Stage Models")
-
-    # PromptCrafter (Stage 1)
-    st.markdown("**Stage 1: PromptCrafter**")
-    crafter_provider = st.selectbox("Provider", PROVIDERS, index=0, key="crafter_p")
-    crafter_key = get_key_for_provider(
-        crafter_provider, override_gemini, override_groq, override_deepseek, override_openrouter
-    )
-    crafter_models = get_models_for_provider(crafter_provider, crafter_key)
-    crafter_model = st.selectbox(
-        "Model",
-        options=crafter_models,
-        index=0,
-        key="crafter_m",
-        help="Model queried dynamically from provider API",
-    )
-
-    # LogicVerifier (Stage 2)
-    st.markdown("**Stage 2: LogicVerifier**")
-    verifier_provider = st.selectbox("Provider", PROVIDERS, index=1, key="verifier_p")
-    verifier_key = get_key_for_provider(
-        verifier_provider, override_gemini, override_groq, override_deepseek, override_openrouter
-    )
-    verifier_models = get_models_for_provider(verifier_provider, verifier_key)
-    verifier_model = st.selectbox(
-        "Model",
-        options=verifier_models,
-        index=0,
-        key="verifier_m",
-        help="Model queried dynamically from provider API",
-    )
-
-    # Executor (Stage 3)
-    st.markdown("**Stage 3: Executor**")
-    executor_provider = st.selectbox("Provider", PROVIDERS, index=0, key="executor_p")
-    executor_key = get_key_for_provider(
-        executor_provider, override_gemini, override_groq, override_deepseek, override_openrouter
-    )
-    executor_models = get_models_for_provider(executor_provider, executor_key)
-    executor_model = st.selectbox(
-        "Model",
-        options=executor_models,
-        index=0,
-        key="executor_m",
-        help="Model queried dynamically from provider API",
-    )
+    if active_keys:
+        st.success(f"Active Providers: {', '.join(active_keys)}")
+    else:
+        st.warning("No API keys detected! Please enter at least one key.")
 
 
 # ----------------- MAIN INTERFACE -----------------
-col_main, col_stats = st.columns([3, 1])
+col_main, col_info = st.columns([3, 1])
 
 with col_main:
     user_goal = st.text_area(
@@ -216,111 +158,124 @@ with col_main:
         placeholder="e.g., Write a high-performance LRU Cache in Python with thread-safety and O(1) complexity.",
     )
 
+with col_info:
+    st.markdown("### 🛡️ Resilience Status")
+    st.markdown(f"**Domain:** `{domain_profile.display_name}`")
+    st.markdown(f"**Combo:** `{routing_profile.name}`")
+    st.markdown("**Failover:** `Active (Auto-Fallback enabled)`")
+
 start_button = st.button("🚀 Start Pipeline", type="primary", use_container_width=True)
 
 if start_button:
     if not user_goal.strip():
         st.warning("Please provide a prompt or task before starting the pipeline.")
+    elif not active_keys:
+        st.error("Cannot start: No API keys configured. Please add at least one key in the sidebar.")
     else:
-        # Check required API keys for selected stages
-        missing_keys = []
-        if not crafter_key:
-            missing_keys.append(f"PromptCrafter ({crafter_provider})")
-        if not verifier_key:
-            missing_keys.append(f"LogicVerifier ({verifier_provider})")
-        if not executor_key:
-            missing_keys.append(f"Executor ({executor_provider})")
+        try:
+            # Build unified RouterClient
+            api_keys: Dict[str, str] = {
+                "gemini": override_gemini,
+                "groq": override_groq,
+                "deepseek": override_deepseek,
+                "openrouter": override_openrouter,
+            }
+            router = RouterClient(api_keys=api_keys)
 
-        if missing_keys:
-            st.error(
-                f"Missing API keys for: {', '.join(missing_keys)}. "
-                "Please configure them in the sidebar before starting."
+            # Factory generates domain-specific agents with routing fallback chains
+            crafter_agent, verifier_agent, executor_agent = AgentFactory.create_pipeline_agents(
+                domain_profile=domain_profile,
+                router=router,
+                routing_profile=routing_profile,
             )
-        else:
-            try:
-                # Instantiate clients
-                crafter_client = init_llm_client(
-                    crafter_provider,
-                    crafter_model,
-                    crafter_key,
-                )
 
-                verifier_client = init_llm_client(
-                    verifier_provider,
-                    verifier_model,
-                    verifier_key,
-                )
+            pipeline = AgentPipeline(
+                domain_key=selected_domain_key,
+                routing_profile_id=routing_profile.id,
+                crafter=crafter_agent,
+                verifier=verifier_agent,
+                executor=executor_agent,
+            )
 
-                executor_client = init_llm_client(
-                    executor_provider,
-                    executor_model,
-                    executor_key,
-                )
+            st.divider()
+            st.subheader(f"Pipeline Execution ({routing_profile.name})")
 
-                # Build agents and pipeline
-                crafter_agent, verifier_agent, executor_agent = AgentFactory.create_pipeline_agents(
-                    domain_profile=domain_profile,
-                    crafter_client=crafter_client,
-                    verifier_client=verifier_client,
-                    executor_client=executor_client,
-                )
+            # Progressive UI Placeholders
+            stage1_container = st.empty()
+            stage2_container = st.empty()
+            stage3_container = st.empty()
 
-                pipeline = AgentPipeline(
-                    domain_key=selected_domain_key,
-                    crafter=crafter_agent,
-                    verifier=verifier_agent,
-                    executor=executor_agent,
-                )
+            progress_bar = st.progress(0, text="Initializing OmniRoute gateway...")
 
-                st.divider()
-                st.subheader("Progressive Pipeline Results")
+            # Run generator
+            stage_gen = pipeline.run_stages(user_goal=user_goal)
+            start_total = time.perf_counter()
 
-                # Progressive UI Placeholders
-                stage1_container = st.empty()
-                stage2_container = st.empty()
-                stage3_container = st.empty()
+            # Stage 1: PromptCrafter
+            progress_bar.progress(15, text="Stage 1: PromptCrafter running...")
+            stage1_name, crafter_res = next(stage_gen)
+            with stage1_container.container():
+                header_col1, header_col2 = st.columns([3, 1])
+                with header_col1:
+                    st.markdown(f"### 📝 1. PromptCrafter Output")
+                with header_col2:
+                    st.caption(f"⏱️ `{crafter_res.execution_time_seconds:.2f}s` | Model: `{crafter_res.provider_used}/{crafter_res.model_used}`")
 
-                progress_bar = st.progress(0, text="Starting pipeline...")
-
-                # Run generator
-                stage_gen = pipeline.run_stages(user_goal=user_goal)
-                start_total = time.perf_counter()
-
-                # Stage 1
-                progress_bar.progress(15, text=f"Stage 1: PromptCrafter ({crafter_provider} - {crafter_model}) running...")
-                stage1_name, crafter_res = next(stage_gen)
-                with stage1_container.container():
-                    st.markdown(
-                        f"### 📝 1. PromptCrafter Output (`{crafter_model}`) "
-                        f"`{crafter_res.execution_time_seconds:.2f}s`"
+                if crafter_res.was_fallback:
+                    st.warning(
+                        f"⚠️ **Auto-fallback activated!** Model used: `{crafter_res.provider_used}/{crafter_res.model_used}`. "
+                        f"Skipped: {', '.join(crafter_res.fallback_history)}"
                     )
-                    with st.expander("View Crafted Plan & Structured Specification", expanded=True):
-                        st.markdown(crafter_res.content)
+                else:
+                    st.success(f"✅ Primary model responded: `{crafter_res.provider_used}/{crafter_res.model_used}`")
 
-                # Stage 2
-                progress_bar.progress(50, text=f"Stage 2: LogicVerifier ({verifier_provider} - {verifier_model}) running...")
-                stage2_name, verifier_res = next(stage_gen)
-                with stage2_container.container():
-                    st.markdown(
-                        f"### 🔍 2. LogicVerifier Output (`{verifier_model}`) "
-                        f"`{verifier_res.execution_time_seconds:.2f}s`"
+                with st.expander("View Crafted Plan & Structured Specification", expanded=True):
+                    st.markdown(crafter_res.content)
+
+            # Stage 2: LogicVerifier
+            progress_bar.progress(50, text="Stage 2: LogicVerifier running...")
+            stage2_name, verifier_res = next(stage_gen)
+            with stage2_container.container():
+                header_col1, header_col2 = st.columns([3, 1])
+                with header_col1:
+                    st.markdown(f"### 🔍 2. LogicVerifier Output")
+                with header_col2:
+                    st.caption(f"⏱️ `{verifier_res.execution_time_seconds:.2f}s` | Model: `{verifier_res.provider_used}/{verifier_res.model_used}`")
+
+                if verifier_res.was_fallback:
+                    st.warning(
+                        f"⚠️ **Auto-fallback activated!** Model used: `{verifier_res.provider_used}/{verifier_res.model_used}`. "
+                        f"Skipped: {', '.join(verifier_res.fallback_history)}"
                     )
-                    with st.expander("View Logic Audit & Criticisms", expanded=True):
-                        st.markdown(verifier_res.content)
+                else:
+                    st.success(f"✅ Primary model responded: `{verifier_res.provider_used}/{verifier_res.model_used}`")
 
-                # Stage 3
-                progress_bar.progress(80, text=f"Stage 3: Executor ({executor_provider} - {executor_model}) running...")
-                stage3_name, executor_res = next(stage_gen)
-                with stage3_container.container():
-                    st.markdown(
-                        f"### 🎯 3. Final Execution Result (`{executor_model}`) "
-                        f"`{executor_res.execution_time_seconds:.2f}s`"
+                with st.expander("View Logic Audit & Criticisms", expanded=True):
+                    st.markdown(verifier_res.content)
+
+            # Stage 3: Executor
+            progress_bar.progress(80, text="Stage 3: Executor running...")
+            stage3_name, executor_res = next(stage_gen)
+            with stage3_container.container():
+                header_col1, header_col2 = st.columns([3, 1])
+                with header_col1:
+                    st.markdown(f"### 🎯 3. Final Execution Result")
+                with header_col2:
+                    st.caption(f"⏱️ `{executor_res.execution_time_seconds:.2f}s` | Model: `{executor_res.provider_used}/{executor_res.model_used}`")
+
+                if executor_res.was_fallback:
+                    st.warning(
+                        f"⚠️ **Auto-fallback activated!** Model used: `{executor_res.provider_used}/{executor_res.model_used}`. "
+                        f"Skipped: {', '.join(executor_res.fallback_history)}"
                     )
-                    st.markdown(executor_res.content)
+                else:
+                    st.success(f"✅ Primary model responded: `{executor_res.provider_used}/{executor_res.model_used}`")
 
-                total_time = time.perf_counter() - start_total
-                progress_bar.progress(100, text=f"Pipeline complete in {total_time:.2f}s! ✅")
-                st.success(f"Pipeline finished successfully in {total_time:.2f}s")
+                st.markdown(executor_res.content)
 
-            except Exception as ex:
-                st.error(f"Pipeline Execution Error: {ex}")
+            total_time = time.perf_counter() - start_total
+            progress_bar.progress(100, text=f"Pipeline complete in {total_time:.2f}s! ✅")
+            st.success(f"🎉 Pipeline finished successfully in {total_time:.2f}s with OmniRoute auto-fallback!")
+
+        except Exception as ex:
+            st.error(f"❌ Pipeline Execution Error: {ex}")

@@ -3,9 +3,8 @@
 Each RoutingProfile defines a named strategy with fallback chains for
 each pipeline stage (PromptCrafter, LogicVerifier, Executor).
 
-Models that lack a configured API key are automatically filtered out
-by RouterClient.filter_chain(), so combos gracefully degrade when
-not all providers are set up.
+Models that lack a configured API key or encounter errors (404, 429, 402, 5xx)
+are automatically failed-over by RouterClient across providers.
 """
 
 from typing import Dict, List
@@ -39,23 +38,26 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
         icon="💻",
         description=(
             "Quality-first routing for software engineering. "
-            "Prioritizes strong reasoning models (DeepSeek, Claude) with "
-            "Gemini and Groq as reliable fallbacks."
+            "Prioritizes Gemini 3.8 Flash and Groq GPT-OSS-120B with "
+            "Qwen and DeepSeek as resilient fallbacks."
         ),
         crafter_chain=[
-            "deepseek/deepseek-chat",
             "gemini/gemini-3.8-flash",
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
+            "groq/qwen/qwen3.8-27b",
+            "deepseek/deepseek-chat",
         ],
         verifier_chain=[
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
             "gemini/gemini-3.8-flash",
+            "groq/qwen/qwen3.8-27b",
             "deepseek/deepseek-chat",
         ],
         executor_chain=[
-            "deepseek/deepseek-chat",
             "gemini/gemini-3.8-flash",
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
+            "groq/qwen/qwen3.8-27b",
+            "deepseek/deepseek-chat",
         ],
     ),
     "fast_throughput": RoutingProfile(
@@ -63,23 +65,24 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
         name="Ultra Fast / Low Latency",
         icon="⚡",
         description=(
-            "Speed-first routing using Groq's LPU hardware for near-instant "
-            "inference. Falls back to Gemini and DeepSeek for resilience."
+            "Speed-first routing using Groq's high-speed inference. "
+            "Falls back to Gemini 3.8 Flash for unmatched reliability."
         ),
         crafter_chain=[
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
+            "groq/openai/gpt-oss-20b",
             "gemini/gemini-3.8-flash",
-            "deepseek/deepseek-chat",
+            "groq/qwen/qwen3.8-27b",
         ],
         verifier_chain=[
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-20b",
+            "groq/openai/gpt-oss-120b",
             "gemini/gemini-3.8-flash",
-            "deepseek/deepseek-chat",
         ],
         executor_chain=[
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
             "gemini/gemini-3.8-flash",
-            "deepseek/deepseek-chat",
+            "groq/qwen/qwen3.8-27b",
         ],
     ),
     "free_tier": RoutingProfile(
@@ -87,22 +90,23 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
         name="Free Tier Optimized",
         icon="🆓",
         description=(
-            "Uses only free-tier models. Groq and Gemini AI Studio offer "
-            "generous free quotas. OpenRouter ':free' models as last resort."
+            "Uses generous free-tier quotas from Groq and Google AI Studio. "
+            "OpenRouter ':free' models as extra safeguard."
         ),
         crafter_chain=[
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
             "gemini/gemini-3.8-flash",
+            "groq/qwen/qwen3.8-27b",
             "openrouter/meta-llama/llama-3.3-70b-instruct:free",
         ],
         verifier_chain=[
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-20b",
             "gemini/gemini-3.8-flash",
-            "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+            "groq/openai/gpt-oss-120b",
         ],
         executor_chain=[
-            "groq/llama-3.3-70b-versatile",
             "gemini/gemini-3.8-flash",
+            "groq/openai/gpt-oss-120b",
             "openrouter/meta-llama/llama-3.3-70b-instruct:free",
         ],
     ),
@@ -111,23 +115,23 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
         name="Balanced Reasoning",
         icon="⚖️",
         description=(
-            "Well-rounded routing balancing quality, speed, and cost. "
-            "Gemini as primary with Groq speed and DeepSeek depth as fallbacks."
+            "Balanced quality, latency, and resilience. "
+            "Gemini 3.8 Flash as anchor with Groq and DeepSeek as fallbacks."
         ),
         crafter_chain=[
             "gemini/gemini-3.8-flash",
-            "groq/llama-3.3-70b-versatile",
-            "deepseek/deepseek-chat",
+            "groq/openai/gpt-oss-120b",
+            "groq/qwen/qwen3.8-27b",
         ],
         verifier_chain=[
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
             "gemini/gemini-3.8-flash",
-            "deepseek/deepseek-chat",
+            "groq/openai/gpt-oss-20b",
         ],
         executor_chain=[
             "gemini/gemini-3.8-flash",
+            "groq/openai/gpt-oss-120b",
             "deepseek/deepseek-chat",
-            "groq/llama-3.3-70b-versatile",
         ],
     ),
     "deep_reasoning": RoutingProfile(
@@ -135,23 +139,23 @@ ROUTING_PROFILES: Dict[str, RoutingProfile] = {
         name="Deep Reasoning & Analysis",
         icon="🧠",
         description=(
-            "Optimized for complex reasoning tasks like mathematics, proofs, "
-            "and multi-step analysis. Prioritizes DeepSeek Reasoner and Gemini Pro."
+            "Optimized for complex reasoning tasks (mathematics, logic proofs). "
+            "Prioritizes high-parameter models and reasoning engines."
         ),
         crafter_chain=[
-            "deepseek/deepseek-reasoner",
+            "groq/openai/gpt-oss-120b",
             "gemini/gemini-3.8-flash",
-            "groq/llama-3.3-70b-versatile",
+            "deepseek/deepseek-reasoner",
         ],
         verifier_chain=[
-            "deepseek/deepseek-reasoner",
-            "groq/llama-3.3-70b-versatile",
             "gemini/gemini-3.8-flash",
+            "groq/openai/gpt-oss-120b",
+            "groq/qwen/qwen3.8-27b",
         ],
         executor_chain=[
-            "deepseek/deepseek-chat",
             "gemini/gemini-3.8-flash",
-            "groq/llama-3.3-70b-versatile",
+            "groq/openai/gpt-oss-120b",
+            "deepseek/deepseek-chat",
         ],
     ),
 }

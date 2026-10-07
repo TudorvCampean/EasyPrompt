@@ -217,21 +217,14 @@ class RouterClient:
 
             except APIError as e:
                 elapsed = time.perf_counter() - start
-                status = getattr(e, "status_code", None)
-                if status and status in TRANSIENT_STATUS_CODES:
-                    reason = f"{model_id} (HTTP {status}, {elapsed:.1f}s)"
-                    fallback_history.append(reason)
-                    logger.warning(
-                        "Transient error %s on %s, trying next fallback...",
-                        status, model_id,
-                    )
-                    last_error = e
-                else:
-                    # Non-transient error (e.g. 401 auth): skip this provider entirely
-                    reason = f"{model_id} (HTTP {status} non-transient, {elapsed:.1f}s)"
-                    fallback_history.append(reason)
-                    logger.error("Non-transient error on %s: %s", model_id, e)
-                    last_error = e
+                status = getattr(e, "status_code", "error")
+                reason = f"{model_id} (HTTP {status}, {elapsed:.1f}s)"
+                fallback_history.append(reason)
+                logger.warning(
+                    "Error %s on %s, trying next fallback...",
+                    status, model_id,
+                )
+                last_error = e
 
             except Exception as e:
                 elapsed = time.perf_counter() - start
