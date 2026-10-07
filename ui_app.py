@@ -1,6 +1,7 @@
 """Streamlit Web UI for EasyPrompt Multi-Agent Pipeline."""
 
 import time
+from typing import List
 import streamlit as st
 
 from core.config import settings
@@ -16,21 +17,54 @@ from agents.factory import AgentFactory
 from orchestrator.pipeline import AgentPipeline
 
 
-def init_llm_client(provider: str, model_name: str, key_override: str = "") -> BaseLLMClient:
+PROVIDERS = ["Gemini", "Groq", "DeepSeek", "OpenRouter"]
+
+
+def init_llm_client(provider: str, model_name: str = "", key_override: str = "") -> BaseLLMClient:
     """Instantiate the corresponding LLM client with fallback to settings."""
     if provider == "Gemini":
         api_key = key_override or settings.gemini_api_key
-        return GeminiClient(api_key=api_key, model_name=model_name)
+        return GeminiClient(api_key=api_key, model_name=model_name or "gemini-3.8-flash")
     elif provider == "Groq":
         api_key = key_override or settings.groq_api_key
-        return GroqClient(api_key=api_key, model_name=model_name)
+        return GroqClient(api_key=api_key, model_name=model_name or "llama-3.3-70b-versatile")
     elif provider == "DeepSeek":
         api_key = key_override or settings.deepseek_api_key
-        return DeepSeekClient(api_key=api_key, model_name=model_name)
+        return DeepSeekClient(api_key=api_key, model_name=model_name or "deepseek-chat")
     elif provider == "OpenRouter":
         api_key = key_override or settings.openrouter_api_key
-        return OpenRouterClient(api_key=api_key, model_name=model_name)
+        return OpenRouterClient(api_key=api_key, model_name=model_name or "anthropic/claude-3.5-sonnet")
     raise ValueError(f"Unsupported provider: {provider}")
+
+
+def get_key_for_provider(
+    provider: str,
+    gemini_k: str,
+    groq_k: str,
+    deepseek_k: str,
+    openrouter_k: str,
+) -> str:
+    """Helper to return the relevant API key for a given provider."""
+    if provider == "Gemini":
+        return gemini_k
+    elif provider == "Groq":
+        return groq_k
+    elif provider == "DeepSeek":
+        return deepseek_k
+    elif provider == "OpenRouter":
+        return openrouter_k
+    return ""
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_models_for_provider(provider: str, api_key: str) -> List[str]:
+    """Dynamically query and return available models for a provider, cached for 60s."""
+    try:
+        client = init_llm_client(provider=provider, model_name="", key_override=api_key)
+        models = client.get_available_models()
+        return models if models else ["default"]
+    except Exception:
+        return ["default"]
 
 
 # Page configuration
@@ -51,7 +85,7 @@ st.caption(
 with st.sidebar:
     st.header("⚙️ Configuration")
 
-    # Domain selection
+    # 1. Domain selection
     st.subheader("1. Select Domain")
     domain_options = list(DOMAIN_PROFILES.keys())
     domain_format = {k: f"{v.display_name} ({k})" for k, v in DOMAIN_PROFILES.items()}
@@ -66,40 +100,8 @@ with st.sidebar:
 
     st.divider()
 
-    # Model providers per stage
-    st.subheader("2. Stage Models")
-
-    PROVIDERS = ["Gemini", "Groq", "DeepSeek", "OpenRouter"]
-    DEFAULT_MODELS = {
-        "Gemini": "gemini-2.5-flash",
-        "Groq": "llama-3.3-70b-versatile",
-        "DeepSeek": "deepseek-chat",
-        "OpenRouter": "anthropic/claude-3.5-sonnet",
-    }
-
-    # PromptCrafter
-    st.markdown("**Stage 1: PromptCrafter**")
-    crafter_provider = st.selectbox("Provider", PROVIDERS, index=0, key="crafter_p")
-    crafter_model = st.text_input(
-        "Model Name", value=DEFAULT_MODELS[crafter_provider], key="crafter_m"
-    )
-
-    # LogicVerifier
-    st.markdown("**Stage 2: LogicVerifier**")
-    verifier_provider = st.selectbox("Provider", PROVIDERS, index=1, key="verifier_p")
-    verifier_model = st.text_input(
-        "Model Name", value=DEFAULT_MODELS[verifier_provider], key="verifier_m"
-    )
-
-    # Executor
-    st.markdown("**Stage 3: Executor**")
-    executor_provider = st.selectbox("Provider", PROVIDERS, index=0, key="executor_p")
-    executor_model = st.text_input(
-        "Model Name", value=DEFAULT_MODELS[executor_provider], key="executor_m"
-    )
-
-    st.divider()
-    st.subheader("🔑 API Keys & Direct Links")
+    # 2. API Keys & Portal Links
+    st.subheader("2. 🔑 API Keys & Direct Links")
 
     # Gemini
     override_gemini = st.text_input(
@@ -153,6 +155,56 @@ with st.sidebar:
         use_container_width=True,
     )
 
+    st.divider()
+
+    # 3. Dynamic Model Selectors per Stage
+    st.subheader("3. Stage Models")
+
+    # PromptCrafter (Stage 1)
+    st.markdown("**Stage 1: PromptCrafter**")
+    crafter_provider = st.selectbox("Provider", PROVIDERS, index=0, key="crafter_p")
+    crafter_key = get_key_for_provider(
+        crafter_provider, override_gemini, override_groq, override_deepseek, override_openrouter
+    )
+    crafter_models = get_models_for_provider(crafter_provider, crafter_key)
+    crafter_model = st.selectbox(
+        "Model",
+        options=crafter_models,
+        index=0,
+        key="crafter_m",
+        help="Model queried dynamically from provider API",
+    )
+
+    # LogicVerifier (Stage 2)
+    st.markdown("**Stage 2: LogicVerifier**")
+    verifier_provider = st.selectbox("Provider", PROVIDERS, index=1, key="verifier_p")
+    verifier_key = get_key_for_provider(
+        verifier_provider, override_gemini, override_groq, override_deepseek, override_openrouter
+    )
+    verifier_models = get_models_for_provider(verifier_provider, verifier_key)
+    verifier_model = st.selectbox(
+        "Model",
+        options=verifier_models,
+        index=0,
+        key="verifier_m",
+        help="Model queried dynamically from provider API",
+    )
+
+    # Executor (Stage 3)
+    st.markdown("**Stage 3: Executor**")
+    executor_provider = st.selectbox("Provider", PROVIDERS, index=0, key="executor_p")
+    executor_key = get_key_for_provider(
+        executor_provider, override_gemini, override_groq, override_deepseek, override_openrouter
+    )
+    executor_models = get_models_for_provider(executor_provider, executor_key)
+    executor_model = st.selectbox(
+        "Model",
+        options=executor_models,
+        index=0,
+        key="executor_m",
+        help="Model queried dynamically from provider API",
+    )
+
 
 # ----------------- MAIN INTERFACE -----------------
 col_main, col_stats = st.columns([3, 1])
@@ -170,102 +222,105 @@ if start_button:
     if not user_goal.strip():
         st.warning("Please provide a prompt or task before starting the pipeline.")
     else:
-        try:
-            # Instantiate clients
-            crafter_client = init_llm_client(
-                crafter_provider,
-                crafter_model,
-                override_gemini if crafter_provider == "Gemini" else (
-                    override_groq if crafter_provider == "Groq" else (
-                        override_deepseek if crafter_provider == "DeepSeek" else override_openrouter
-                    )
-                ),
+        # Check required API keys for selected stages
+        missing_keys = []
+        if not crafter_key:
+            missing_keys.append(f"PromptCrafter ({crafter_provider})")
+        if not verifier_key:
+            missing_keys.append(f"LogicVerifier ({verifier_provider})")
+        if not executor_key:
+            missing_keys.append(f"Executor ({executor_provider})")
+
+        if missing_keys:
+            st.error(
+                f"Missing API keys for: {', '.join(missing_keys)}. "
+                "Please configure them in the sidebar before starting."
             )
-
-            verifier_client = init_llm_client(
-                verifier_provider,
-                verifier_model,
-                override_gemini if verifier_provider == "Gemini" else (
-                    override_groq if verifier_provider == "Groq" else (
-                        override_deepseek if verifier_provider == "DeepSeek" else override_openrouter
-                    )
-                ),
-            )
-
-            executor_client = init_llm_client(
-                executor_provider,
-                executor_model,
-                override_gemini if executor_provider == "Gemini" else (
-                    override_groq if executor_provider == "Groq" else (
-                        override_deepseek if executor_provider == "DeepSeek" else override_openrouter
-                    )
-                ),
-            )
-
-            # Build agents and pipeline
-            crafter_agent, verifier_agent, executor_agent = AgentFactory.create_pipeline_agents(
-                domain_profile=domain_profile,
-                crafter_client=crafter_client,
-                verifier_client=verifier_client,
-                executor_client=executor_client,
-            )
-
-            pipeline = AgentPipeline(
-                domain_key=selected_domain_key,
-                crafter=crafter_agent,
-                verifier=verifier_agent,
-                executor=executor_agent,
-            )
-
-            st.divider()
-            st.subheader("Progressive Pipeline Results")
-
-            # Progressive UI Placeholders
-            stage1_container = st.empty()
-            stage2_container = st.empty()
-            stage3_container = st.empty()
-
-            progress_bar = st.progress(0, text="Starting pipeline...")
-
-            # Run generator
-            stage_gen = pipeline.run_stages(user_goal=user_goal)
-            start_total = time.perf_counter()
-
-            # Stage 1
-            progress_bar.progress(15, text=f"Stage 1: PromptCrafter ({crafter_provider}) running...")
-            stage1_name, crafter_res = next(stage_gen)
-            with stage1_container.container():
-                st.markdown(
-                    f"### 📝 1. PromptCrafter Output "
-                    f"`{crafter_res.execution_time_seconds:.2f}s`"
+        else:
+            try:
+                # Instantiate clients
+                crafter_client = init_llm_client(
+                    crafter_provider,
+                    crafter_model,
+                    crafter_key,
                 )
-                with st.expander("View Crafted Plan & Structured Specification", expanded=True):
-                    st.markdown(crafter_res.content)
 
-            # Stage 2
-            progress_bar.progress(50, text=f"Stage 2: LogicVerifier ({verifier_provider}) running...")
-            stage2_name, verifier_res = next(stage_gen)
-            with stage2_container.container():
-                st.markdown(
-                    f"### 🔍 2. LogicVerifier Output "
-                    f"`{verifier_res.execution_time_seconds:.2f}s`"
+                verifier_client = init_llm_client(
+                    verifier_provider,
+                    verifier_model,
+                    verifier_key,
                 )
-                with st.expander("View Logic Audit & Criticisms", expanded=True):
-                    st.markdown(verifier_res.content)
 
-            # Stage 3
-            progress_bar.progress(80, text=f"Stage 3: Executor ({executor_provider}) running...")
-            stage3_name, executor_res = next(stage_gen)
-            with stage3_container.container():
-                st.markdown(
-                    f"### 🎯 3. Final Execution Result "
-                    f"`{executor_res.execution_time_seconds:.2f}s`"
+                executor_client = init_llm_client(
+                    executor_provider,
+                    executor_model,
+                    executor_key,
                 )
-                st.markdown(executor_res.content)
 
-            total_time = time.perf_counter() - start_total
-            progress_bar.progress(100, text=f"Pipeline complete in {total_time:.2f}s! ✅")
-            st.success(f"Pipeline finished successfully in {total_time:.2f}s")
+                # Build agents and pipeline
+                crafter_agent, verifier_agent, executor_agent = AgentFactory.create_pipeline_agents(
+                    domain_profile=domain_profile,
+                    crafter_client=crafter_client,
+                    verifier_client=verifier_client,
+                    executor_client=executor_client,
+                )
 
-        except Exception as ex:
-            st.error(f"Pipeline Execution Error: {ex}")
+                pipeline = AgentPipeline(
+                    domain_key=selected_domain_key,
+                    crafter=crafter_agent,
+                    verifier=verifier_agent,
+                    executor=executor_agent,
+                )
+
+                st.divider()
+                st.subheader("Progressive Pipeline Results")
+
+                # Progressive UI Placeholders
+                stage1_container = st.empty()
+                stage2_container = st.empty()
+                stage3_container = st.empty()
+
+                progress_bar = st.progress(0, text="Starting pipeline...")
+
+                # Run generator
+                stage_gen = pipeline.run_stages(user_goal=user_goal)
+                start_total = time.perf_counter()
+
+                # Stage 1
+                progress_bar.progress(15, text=f"Stage 1: PromptCrafter ({crafter_provider} - {crafter_model}) running...")
+                stage1_name, crafter_res = next(stage_gen)
+                with stage1_container.container():
+                    st.markdown(
+                        f"### 📝 1. PromptCrafter Output (`{crafter_model}`) "
+                        f"`{crafter_res.execution_time_seconds:.2f}s`"
+                    )
+                    with st.expander("View Crafted Plan & Structured Specification", expanded=True):
+                        st.markdown(crafter_res.content)
+
+                # Stage 2
+                progress_bar.progress(50, text=f"Stage 2: LogicVerifier ({verifier_provider} - {verifier_model}) running...")
+                stage2_name, verifier_res = next(stage_gen)
+                with stage2_container.container():
+                    st.markdown(
+                        f"### 🔍 2. LogicVerifier Output (`{verifier_model}`) "
+                        f"`{verifier_res.execution_time_seconds:.2f}s`"
+                    )
+                    with st.expander("View Logic Audit & Criticisms", expanded=True):
+                        st.markdown(verifier_res.content)
+
+                # Stage 3
+                progress_bar.progress(80, text=f"Stage 3: Executor ({executor_provider} - {executor_model}) running...")
+                stage3_name, executor_res = next(stage_gen)
+                with stage3_container.container():
+                    st.markdown(
+                        f"### 🎯 3. Final Execution Result (`{executor_model}`) "
+                        f"`{executor_res.execution_time_seconds:.2f}s`"
+                    )
+                    st.markdown(executor_res.content)
+
+                total_time = time.perf_counter() - start_total
+                progress_bar.progress(100, text=f"Pipeline complete in {total_time:.2f}s! ✅")
+                st.success(f"Pipeline finished successfully in {total_time:.2f}s")
+
+            except Exception as ex:
+                st.error(f"Pipeline Execution Error: {ex}")
