@@ -1,7 +1,8 @@
-"""Factory for creating agents configured with domain-specific personas."""
+"""Factory for creating agents configured with domain-specific personas and routing chains."""
 
-from typing import Optional, Tuple
-from core.llm_clients import BaseLLMClient
+from typing import List, Tuple
+from core.router import RouterClient
+from core.combos import RoutingProfile
 from domain.profiles import DomainProfile
 from agents.prompt_crafter import PromptCrafter
 from agents.logic_verifier import LogicVerifier
@@ -9,33 +10,42 @@ from agents.executor import Executor
 
 
 class AgentFactory:
-    """Factory creating configured multi-agent instances based on domain profiles."""
+    """Factory creating configured multi-agent instances based on domain profiles and routing combos."""
 
     @staticmethod
     def create_pipeline_agents(
         domain_profile: DomainProfile,
-        crafter_client: BaseLLMClient,
-        verifier_client: BaseLLMClient,
-        executor_client: Optional[BaseLLMClient] = None,
+        router: RouterClient,
+        routing_profile: RoutingProfile,
     ) -> Tuple[PromptCrafter, LogicVerifier, Executor]:
-        """Instantiate Crafter, Verifier, and Executor with domain personas and injected LLM clients."""
-        final_executor_client = executor_client if executor_client is not None else crafter_client
+        """Instantiate all pipeline agents with domain personas and routing chains.
 
+        Args:
+            domain_profile: Domain-specific personas/prompts for each agent.
+            router: The unified RouterClient instance.
+            routing_profile: The selected routing combo with fallback chains.
+
+        Returns:
+            Tuple of (PromptCrafter, LogicVerifier, Executor).
+        """
         crafter = PromptCrafter(
             name=f"PromptCrafter [{domain_profile.display_name}]",
-            llm_client=crafter_client,
+            router=router,
+            model_chain=routing_profile.crafter_chain,
             system_instruction=domain_profile.crafter_system_prompt,
         )
 
         verifier = LogicVerifier(
             name=f"LogicVerifier [{domain_profile.display_name}]",
-            llm_client=verifier_client,
+            router=router,
+            model_chain=routing_profile.verifier_chain,
             system_instruction=domain_profile.verifier_system_prompt,
         )
 
         executor = Executor(
             name=f"Executor [{domain_profile.display_name}]",
-            llm_client=final_executor_client,
+            router=router,
+            model_chain=routing_profile.executor_chain,
             system_instruction=domain_profile.executor_system_prompt,
         )
 
