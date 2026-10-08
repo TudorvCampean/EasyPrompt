@@ -5,7 +5,6 @@
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Streamlit UI](https://img.shields.io/badge/UI-Streamlit-red.svg)](https://streamlit.io/)
 [![Protocol](https://img.shields.io/badge/gateway-OpenAI--Compatible-green.svg)](https://platform.openai.com/docs/api-reference)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 EasyPrompt is a modular multi-agent orchestrator that splits complex problem-solving into a structured, three-stage pipeline (**PromptCrafter** ➔ **LogicVerifier** ➔ **Executor**). Each stage dynamically adapts its system personas and evaluation criteria based on the selected **Domain Profile** (Coding, Mathematics, Creative Writing, or General Reasoning).
 
@@ -30,6 +29,39 @@ To ensure zero downtime, EasyPrompt integrates an **OmniRoute-inspired Unified G
 - **Dual Interface**:
   - **Interactive Web UI (Streamlit)**: Live stage-by-stage progressive streaming, expandable intermediate reasoning, dynamic API key configuration, and fallback telemetry badges.
   - **Rich CLI**: Clean terminal interface with formatted tables, execution metrics, and progress logs.
+
+---
+
+## 📸 Screenshots & Demo
+
+### 1. Main Interface & Task Input
+Configure domain profiles, routing presets, and start execution with live status updates:
+
+![EasyPrompt Main Interface](assets/screenshots/01-ui-task-input.png)
+
+### 2. Configuration & Fallback Chains
+Inspect fallback chains and manage API keys dynamically in the sidebar:
+
+| Fallback Chains Inspection | Active Provider API Keys |
+| :---: | :---: |
+| ![Routing Combos](assets/screenshots/02-routing-combos.png) | ![API Keys](assets/screenshots/03-api-keys.png) |
+
+### 3. Stage 1 — PromptCrafter Specification
+The first agent generates a deep architectural blueprint, edge case considerations, and complexity targets:
+
+![PromptCrafter Blueprint](assets/screenshots/04-stage1-blueprint.png)
+
+### 4. Resilient Auto-Fallback in Action
+When Gemini returned an `HTTP 503` error, the gateway automatically recovered and switched to Groq without pipeline interruption:
+
+![Auto-Fallback in Action](assets/screenshots/05-auto-fallback-active.png)
+
+### 5. Stage 3 — Production Solution & Verification Matrix
+The Executor synthesizes the final solution, complete with a requirement fulfillment matrix and test harness:
+
+![Code Solution](assets/screenshots/06-stage3-code-solution.png)
+
+![Requirements Matrix](assets/screenshots/07-requirements-matrix.png)
 
 ---
 
@@ -301,6 +333,6 @@ Add a new `RoutingProfile` entry to `ROUTING_PROFILES` in [core/combos.py](file:
 
 ---
 
-## 📄 License
+## ⚠️ Disclaimer
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+<!-- Write your disclaimer here -->
