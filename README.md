@@ -335,4 +335,5 @@ Add a new `RoutingProfile` entry to `ROUTING_PROFILES` in [core/combos.py](file:
 
 ## ⚠️ Disclaimer
 
+This project was build for fun and to test how quick I could get something done using Antigravity. It does not showcase my capabilities and coding skills as it is a "prompting" project.
 <!-- Write your disclaimer here -->
